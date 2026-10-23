@@ -44,6 +44,8 @@
   }
   button:hover, .btn:hover { border-color: var(--accent); color: var(--accent); }
   button:disabled { opacity: 0.6; cursor: progress; }
+  .row button.btn:disabled { opacity: 0.35; cursor: default; }
+  .row button.btn:disabled:hover { border-color: var(--line); color: var(--fg); }
   button:focus-visible, .btn:focus-visible, input:focus-visible, .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .primary { border-color: var(--accent); color: var(--accent); }
   .bar { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
@@ -246,14 +248,24 @@ async function showAddress(addr, my) {
 }
 
 // ---- one board --------------------------------------------------------------
+function step(to, label, name, on) {
+  return on
+    ? el('a', { className: 'btn', href: `#${to}`, textContent: label, ariaLabel: name })
+    : el('button', { type: 'button', className: 'btn', textContent: label, ariaLabel: name, disabled: true });
+}
+
 async function showToken(id, my) {
   const stage = el('div', { className: 'stage' }, el('div', { className: 'status', textContent: `FETCHING PENDING #${id}…` }));
   const side = el('div', { className: 'side' });
   const nav = el('div', { className: 'row' },
     el('a', { className: 'btn', href: '#', textContent: '← All boards' }),
-    el('a', { className: 'btn', href: `#${Math.max(1, id - 1)}`, textContent: '<', ariaLabel: 'Previous board' }),
-    el('a', { className: 'btn', href: `#${id + 1}`, textContent: '>', ariaLabel: 'Next board' }));
+    step(id - 1, '<', 'Previous board', id > 1),
+    step(id + 1, '>', 'Next board', false));
   $view.replaceChildren(el('div', { className: 'detail' }, el('div', { style: 'display:grid;gap:12px;min-width:0' }, nav, stage), side));
+  // only step forward onto boards that exist
+  // re-check the chain when at the newest known board, in case someone just minted
+  if (id >= total) total = Math.max(total, await totalSupply().catch(() => 0));
+  if (my === route && id < total) nav.lastChild.replaceWith(step(id + 1, '>', 'Next board', true));
 
   let m;
   try { m = await getMeta(id); } catch { if (my === route) stage.firstChild.textContent = 'Could not load this board. Check your connection.'; return; }
