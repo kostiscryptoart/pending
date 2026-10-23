@@ -201,7 +201,7 @@ function mintPrompt() {
   const open = Date.now() < MINT_CLOSES;
   return el('div', { className: 'cta' },
     el('p', {},
-      el('strong', { textContent: open ? 'Mint yours' : 'The mint is confirmed' }),
+      el('strong', { textContent: open ? 'Mint yours on highlight.xyz' : 'The mint is confirmed' }),
       el('span', { textContent: open ? 'Free on Ethereum · up to 3 per wallet · closes Thu 29 Oct, 17:00 UTC' : 'No new board will ever be minted' })),
     el('a', open
       ? { href: MINT_URL, target: '_blank', rel: 'noopener', textContent: 'MINT YOURS →' }
