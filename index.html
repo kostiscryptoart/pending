@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PENDING Viewer</title>
+<meta name="description" content="Every PENDING board, live and animated.">
+<style>
+  /* Terminal readout: gallery of every board, one board per detail view. */
+  :root {
+    --bg: #070807;
+    --panel: #0e110e;
+    --line: #233024;
+    --fg: #d7e6d5;
+    --dim: #7d8f7b;
+    --accent: #39ff6a;
+    --err: #ff5a4a;
+    --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--mono); }
+  main {
+    max-width: 1120px; margin: 0 auto;
+    padding-block: 24px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; gap: 20px;
+  }
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+  .brand { display: grid; gap: 2px; }
+  h1 { margin: 0; font-size: 18px; letter-spacing: 0.14em; }
+  h1 a { color: var(--accent); text-decoration: none; }
+  .tag { color: var(--dim); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+  form { display: flex; gap: 8px; flex: 1 1 320px; max-width: 520px; }
+  input {
+    flex: 1; min-width: 0; background: var(--panel); color: var(--fg); border: 1px solid var(--line);
+    font: inherit; padding: 8px 10px; border-radius: 0;
+  }
+  input::placeholder { color: var(--dim); }
+  button, .btn {
+    background: var(--panel); color: var(--fg); border: 1px solid var(--line);
+    font: inherit; padding: 8px 12px; cursor: pointer; text-decoration: none; display: inline-block; border-radius: 0; white-space: nowrap;
+  }
+  button:hover, .btn:hover { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: 0.6; cursor: progress; }
+  button:focus-visible, .btn:focus-visible, input:focus-visible, .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .primary { border-color: var(--accent); color: var(--accent); }
+  .bar { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+  .bar h2 { margin: 0; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: normal; color: var(--dim); }
+  .bar h2 b { color: var(--fg); font-weight: normal; }
+  .msg { color: var(--dim); margin: 0; }
+  .msg.err { color: var(--err); }
+
+  /* gallery */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+  .card { display: grid; gap: 6px; color: inherit; text-decoration: none; min-width: 0; }
+  .thumb { position: relative; aspect-ratio: 1 / 1; max-width: 100%; background: #000; border: 1px solid var(--line); overflow: hidden; }
+  .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+  .thumb .wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--dim); font-size: 12px; letter-spacing: 0.08em; }
+  .card:hover .thumb { border-color: var(--accent); }
+  .cap { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; min-width: 0; }
+  .cap span:first-child { color: var(--fg); }
+  .cap span:last-child { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* detail */
+  .detail { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+  @media (max-width: 860px) { .detail { grid-template-columns: minmax(0, 1fr); } }
+  .stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 1 / 1; background: #000; border: 1px solid var(--line); }
+  .stage iframe, .stage img { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; image-rendering: pixelated; }
+  .status { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--dim); }
+  .side { display: grid; gap: 16px; min-width: 0; }
+  .side h2 { margin: 0; font-size: 18px; letter-spacing: 0.08em; }
+  .meta { display: grid; gap: 4px 16px; grid-template-columns: max-content 1fr; margin: 0; font-variant-numeric: tabular-nums; }
+  .meta dt { color: var(--dim); text-transform: uppercase; font-size: 12px; letter-spacing: 0.08em; padding-top: 2px; }
+  .meta dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .meta dd a { color: inherit; }
+  .meta dd a:hover { color: var(--accent); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .progress { height: 4px; background: var(--panel); border: 1px solid var(--line); }
+  .progress i { display: block; height: 100%; width: 0; background: var(--accent); }
+  .note { color: var(--dim); font-size: 12px; margin: 0; max-width: 65ch; }
+  .capture { position: fixed; left: -10000px; top: 0; width: 400px; height: 400px; border: 0; visibility: hidden; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand">
+      <h1><a href="#">PENDING</a></h1>
+      <span class="tag">a board of transactions that never confirm</span>
+    </div>
+    <form id="search" autocomplete="off" role="search">
+      <input id="q" name="q" placeholder="#12 or 0x wallet address" aria-label="Search by token number or wallet address" spellcheck="false">
+      <button type="submit" class="primary">Search</button>
+    </form>
+  </header>
+  <section id="view"></section>
+</main>
+
+<script type="module">
+import { GIFEncoder, quantize, applyPalette } from 'https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js';
+
+const COLLECTION = '01a15b2b-af4a-772b-a266-56b32540e6aa';
+const CONTRACT = '0xd74d858583857bb95e4b89a96f17b90e0bc3a090';
+const RPC = 'https://ethereum-rpc.publicnode.com';
+const META = (id) => `https://metadata.highlight.xyz/${COLLECTION}/${id}`;
+const GIF_SCALE = 2;   // 384 px canvas, 768 px GIF (same as the launch assets)
+
+const $view = document.getElementById('view');
+const meta = new Map();   // id -> metadata | null (not revealed yet)
+let total = 0;
+let route = 0;            // bumps on every navigation so stale async work stops drawing
+
+const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+const short = (a) => a ? a.slice(0, 6) + '..' + a.slice(-4) : '';
+const arweave = (u) => u && u.startsWith('ar://') ? 'https://arweave.net/' + u.slice(5) : u;
+const params = (m) => { try { return new URL(arweave(m.animation_url)).searchParams; } catch { return new URLSearchParams(); } };
+const trait = (m, k) => (m.attributes || []).find((a) => a.trait_type === k)?.value;
+
+// ---- data -------------------------------------------------------------------
+async function rpc(calls) {
+  const body = calls.map((c, i) => ({ jsonrpc: '2.0', id: i, method: 'eth_call', params: [{ to: CONTRACT, data: c }, 'latest'] }));
+  const r = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error('rpc ' + r.status);
+  const out = await r.json();
+  return out.sort((a, b) => a.id - b.id).map((x) => x.result);
+}
+
+async function totalSupply() {
+  try { return parseInt((await rpc(['0x18160ddd']))[0], 16); }
+  catch {
+    // fallback: walk the metadata server until it runs out
+    let n = 0; while ((await fetch(META(n + 1))).ok) n++; return n;
+  }
+}
+
+async function getMeta(id) {
+  if (meta.has(id)) return meta.get(id);
+  const r = await fetch(META(id));
+  const m = r.ok ? await r.json() : null;
+  if (r.ok || r.status === 404) meta.set(id, m);
+  return m;
+}
+
+async function pool(ids, n, fn) {
+  const q = [...ids];
+  await Promise.all(Array.from({ length: n }, async () => { while (q.length) await fn(q.shift()); }));
+}
+
+async function owners(ids) {
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    const res = await rpc(chunk.map((id) => '0x6352211e' + id.toString(16).padStart(64, '0')));
+    chunk.forEach((id, k) => { if (res[k]) out.set(id, '0x' + res[k].slice(-40)); });
+  }
+  return out;
+}
+
+// ---- gallery ----------------------------------------------------------------
+function card(id, note) {
+  const thumb = el('div', { className: 'thumb' }, el('div', { className: 'wait', textContent: `#${id}` }));
+  const right = el('span', { textContent: note || '' });
+  const a = el('a', { className: 'card', href: `#${id}` }, thumb, el('div', { className: 'cap' }, el('span', { textContent: `#${id}` }), right));
+  a.tid = id;
+  a.fill = (m) => {
+    if (!m) { thumb.querySelector('.wait').textContent = 'REVEALING…'; return; }
+    const img = el('img', { src: m.image, alt: `${m.name}, ${trait(m, 'Palette') || ''} palette`, loading: 'lazy', decoding: 'async' });
+    img.onload = () => thumb.querySelector('.wait')?.remove();
+    thumb.append(img);
+    // the minter, written the way the board's own footer writes it: 0x4580..0F61
+    const wa = params(m).get('wa') || '';
+    if (!note && wa) { right.textContent = '0x' + wa.slice(2, 6).toUpperCase() + '..' + wa.slice(-4).toUpperCase(); right.title = wa; }
+  };
+  return a;
+}
+
+function lazyFill(cards, my) {
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      io.unobserve(e.target);
+      getMeta(e.target.tid).then((m) => { if (my === route) e.target.fill(m); }).catch(() => {});
+    }
+  }, { rootMargin: '400px' });
+  cards.forEach((c) => io.observe(c));
+}
+
+async function showGallery(my) {
+  $view.replaceChildren(el('p', { className: 'msg', textContent: 'READING THE CHAIN…' }));
+  if (!total) total = await totalSupply().catch(() => 0);
+  if (my !== route) return;
+  if (!total) { $view.replaceChildren(el('p', { className: 'msg', textContent: 'No boards minted yet.' })); return; }
+  const ids = Array.from({ length: total }, (_, i) => total - i);   // newest first
+  const cards = ids.map((id) => card(id));
+  $view.replaceChildren(
+    el('div', { className: 'bar' }, el('h2', {}, el('b', { textContent: String(total) }), ` board${total === 1 ? '' : 's'} minted, newest first`)),
+    el('div', { className: 'grid' }, ...cards),
+  );
+  lazyFill(cards, my);
+}
+
+async function showAddress(addr, my) {
+  addr = addr.toLowerCase();
+  $view.replaceChildren(el('p', { className: 'msg', textContent: 'SEARCHING EVERY BOARD…' }));
+  if (!total) total = await totalSupply().catch(() => 0);
+  const ids = Array.from({ length: total }, (_, i) => total - i);
+  const [own] = await Promise.all([owners(ids).catch(() => new Map()), pool(ids, 8, (id) => getMeta(id).catch(() => null))]);
+  if (my !== route) return;
+  const hits = [];
+  for (const id of ids) {
+    const m = meta.get(id);
+    const minted = !!m && (params(m).get('wa') || '').toLowerCase() === addr;
+    const owns = (own.get(id) || '') === addr;
+    if (minted || owns) hits.push({ id, note: owns && minted ? 'minted · owns' : owns ? 'owns' : 'minted' });
+  }
+  const head = el('div', { className: 'bar' },
+    el('h2', {}, el('b', { textContent: short(addr) }), ` · ${hits.length} board${hits.length === 1 ? '' : 's'}`),
+    el('a', { className: 'btn', href: '#', textContent: 'All boards' }));
+  if (!hits.length) { $view.replaceChildren(head, el('p', { className: 'msg', textContent: 'This wallet has not minted or collected a PENDING board.' })); return; }
+  const cards = hits.map(({ id, note }) => { const c = card(id, note); c.fill(meta.get(id)); return c; });
+  $view.replaceChildren(head, el('div', { className: 'grid' }, ...cards));
+}
+
+// ---- one board --------------------------------------------------------------
+async function showToken(id, my) {
+  const stage = el('div', { className: 'stage' }, el('div', { className: 'status', textContent: `FETCHING PENDING #${id}…` }));
+  const side = el('div', { className: 'side' });
+  const nav = el('div', { className: 'row' },
+    el('a', { className: 'btn', href: '#', textContent: '← All boards' }),
+    el('a', { className: 'btn', href: `#${Math.max(1, id - 1)}`, textContent: '<', ariaLabel: 'Previous board' }),
+    el('a', { className: 'btn', href: `#${id + 1}`, textContent: '>', ariaLabel: 'Next board' }));
+  $view.replaceChildren(el('div', { className: 'detail' }, el('div', { style: 'display:grid;gap:12px;min-width:0' }, nav, stage), side));
+
+  let m;
+  try { m = await getMeta(id); } catch { if (my === route) stage.firstChild.textContent = 'Could not load this board. Check your connection.'; return; }
+  if (my !== route) return;
+  if (!m) { stage.firstChild.textContent = `PENDING #${id} has not been minted yet.`; return; }
+
+  const live = arweave(m.animation_url);
+  stage.replaceChildren(live
+    ? el('iframe', { src: live, title: m.name, loading: 'eager' })
+    : el('img', { src: m.image, alt: m.name }));
+
+  const q = params(m), wa = q.get('wa') || '';
+  const dl = el('dl', { className: 'meta' });
+  const add = (k, v) => dl.append(el('dt', { textContent: k }), el('dd', {}, v));
+  for (const a of m.attributes || []) add(a.trait_type, String(a.value));
+  if (wa) add('Minted by', el('a', { href: `#${wa}`, textContent: short(wa), title: wa }));
+  const ownerDd = el('span', { textContent: '…' });
+  add('Owner', ownerDd);
+  if (q.get('bn')) add('Block', q.get('bn'));
+  owners([id]).then((o) => { const w = o.get(id); ownerDd.replaceChildren(w ? el('a', { href: `#${w}`, textContent: short(w), title: w }) : '–'); }).catch(() => { ownerDd.textContent = '–'; });
+
+  const bar = el('i'), progress = el('div', { className: 'progress', hidden: true }, bar);
+  const gifBtn = el('button', { type: 'button', className: 'primary', textContent: 'Download GIF' });
+  gifBtn.onclick = () => downloadGif(m, id, gifBtn, progress, bar);
+
+  side.append(
+    el('h2', { textContent: m.name }),
+    dl,
+    el('div', { className: 'row' }, gifBtn,
+      el('a', { className: 'btn', href: live || m.image, target: '_blank', rel: 'noopener', textContent: 'Full screen' })),
+    progress,
+    el('div', { className: 'row' },
+      el('a', { className: 'btn', href: `https://opensea.io/item/ethereum/${CONTRACT}/${id}`, target: '_blank', rel: 'noopener', textContent: 'OpenSea' }),
+      el('a', { className: 'btn', href: `https://highlight.xyz/mint/${COLLECTION}/t/${id}`, target: '_blank', rel: 'noopener', textContent: 'Highlight' })),
+    el('p', { className: 'note', textContent: 'The board runs from its permanent copy on Arweave. The GIF is rendered in your browser from the same code: one full loop, 96 frames, 768 × 768.' }),
+  );
+}
+
+// ---- GIF: run the deployed code in a hidden same-origin frame, step every frame
+const codeCache = new Map();
+async function deployedCode(base) {
+  if (!codeCache.has(base)) codeCache.set(base, (async () => {
+    const html = await (await fetch(base + 'index.html')).text();
+    const srcs = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((x) => x[1]);
+    return Promise.all(srcs.map(async (s) => ({ s, code: await (await fetch(new URL(s, base))).text() })));
+  })());
+  return codeCache.get(base);
+}
+
+async function downloadGif(m, id, btn, progress, bar) {
+  const label = btn.textContent;
+  const say = (t) => { btn.textContent = t; };
+  const tick = () => new Promise((r) => setTimeout(r));
+  btn.disabled = true; progress.hidden = false; bar.style.width = '0';
+  let frame, blobs = [];
+  try {
+    say('Loading code…');
+    const url = new URL(arweave(m.animation_url));
+    const base = url.origin + url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1);
+    const scripts = await deployedCode(base);
+    // hl-gen reads the mint parameters from location.search; a srcdoc frame has none, so hand them in
+    blobs = scripts.map(({ s, code }) => {
+      if (/hl-gen/.test(s)) code = code.replace('window.location.search', JSON.stringify(url.search));
+      return URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+    });
+    frame = el('iframe', { className: 'capture', title: 'GIF renderer' });
+    frame.srcdoc = `<!doctype html><html><body style="margin:0">${blobs.map((b) => `<script src="${b}"><\/script>`).join('')}</body></html>`;
+    document.body.append(frame);
+    const t0 = Date.now();
+    while (!frame.contentWindow.__glyph) {
+      if (Date.now() - t0 > 20000) throw new Error('board did not start');
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const w = frame.contentWindow;
+    w.noLoop();
+    const G = w.__glyph, cnv = frame.contentDocument.querySelector('canvas');
+    const ctx = cnv.getContext('2d');
+    const W = cnv.width, H = cnv.height, S = GIF_SCALE;
+
+    // pass 1: render every frame of the loop, keep the pixels
+    const frames = [];
+    for (let f = 0; f < G.frames; f++) {
+      G.frame(f);
+      frames.push(ctx.getImageData(0, 0, W, H).data.slice());
+      if (f % 4 === 0) { say(`Rendering ${f + 1}/${G.frames}`); bar.style.width = `${(f / G.frames) * 70}%`; await tick(); }
+    }
+    // palette: a board uses a handful of colours, so collect them exactly
+    const seen = new Map();
+    outer: for (const px of frames) for (let i = 0; i < px.length; i += 4) {
+      const k = (px[i] << 16) | (px[i + 1] << 8) | px[i + 2];
+      if (!seen.has(k)) { seen.set(k, seen.size); if (seen.size > 256) break outer; }
+    }
+    const exact = seen.size <= 256;
+    const palette = exact ? [...seen.keys()].map((k) => [k >> 16, (k >> 8) & 255, k & 255]) : quantize(frames[0], 256);
+    // one spare slot marks "unchanged since the last frame", which keeps the file small
+    const CLEAR = palette.length < 256 ? palette.length : -1;
+    if (CLEAR >= 0) palette.push([0, 0, 0]);
+
+    // pass 2: index, scale up with nearest neighbour, encode
+    const gif = GIFEncoder();
+    const delay = Math.round(1000 / G.fps);
+    const big = new Uint8Array(W * S * H * S);
+    let prev = null;
+    for (let f = 0; f < frames.length; f++) {
+      const px = frames[f];
+      let idx;
+      if (exact) { idx = new Uint8Array(W * H); for (let i = 0, p = 0; i < idx.length; i++, p += 4) idx[i] = seen.get((px[p] << 16) | (px[p + 1] << 8) | px[p + 2]); }
+      else idx = applyPalette(px, palette);
+      const out = idx.slice();
+      if (prev && CLEAR >= 0) for (let i = 0; i < out.length; i++) if (idx[i] === prev[i]) out[i] = CLEAR;
+      prev = idx;
+      for (let y = 0; y < H * S; y++) {
+        const src = ((y / S) | 0) * W, dst = y * W * S;
+        for (let x = 0; x < W * S; x++) big[dst + x] = out[src + ((x / S) | 0)];
+      }
+      const opts = { palette: f === 0 ? palette : undefined, delay, repeat: 0, dispose: 1 };
+      if (f > 0 && CLEAR >= 0) Object.assign(opts, { transparent: true, transparentIndex: CLEAR });
+      gif.writeFrame(big, W * S, H * S, opts);
+      if (f % 4 === 0) { say(`Encoding ${f + 1}/${frames.length}`); bar.style.width = `${70 + (f / frames.length) * 30}%`; await tick(); }
+    }
+    gif.finish();
+    const blob = new Blob([gif.bytes()], { type: 'image/gif' });
+    const a = el('a', { href: URL.createObjectURL(blob), download: `pending-${id}.gif` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    bar.style.width = '100%';
+    say(`Saved (${Math.round(blob.size / 1024)} KB)`);
+  } catch (e) {
+    console.error(e);
+    say('GIF failed, try again');
+  } finally {
+    frame?.remove();
+    blobs.forEach((b) => URL.revokeObjectURL(b));
+    setTimeout(() => { btn.disabled = false; btn.textContent = label; progress.hidden = true; }, 2500);
+  }
+}
+
+// ---- routing: #12 opens a board, #0x… lists a wallet, empty is the gallery ---
+function go() {
+  const my = ++route;
+  const h = decodeURIComponent(location.hash.slice(1)).trim();
+  document.getElementById('q').value = /^\d+$/.test(h) ? '#' + h : h;
+  if (/^\d+$/.test(h) && +h > 0) showToken(+h, my);
+  else if (/^0x[0-9a-fA-F]{40}$/.test(h)) showAddress(h, my);
+  else showGallery(my);
+  window.scrollTo(0, 0);
+}
+
+document.getElementById('search').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const v = document.getElementById('q').value.trim().replace(/^#/, '');
+  if (/^\d+$/.test(v) && +v > 0) location.hash = v;
+  else if (/^0x[0-9a-fA-F]{40}$/.test(v)) location.hash = v.toLowerCase();
+  else if (!v) location.hash = '';
+  else $view.replaceChildren(el('p', { className: 'msg err', textContent: 'Enter a board number like #12, or a full 0x wallet address.' }));
+});
+window.addEventListener('hashchange', go);
+go();
+</script>
+</body>
+</html>
